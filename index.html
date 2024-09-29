@@ -1,0 +1,239 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expense Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.3.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.16.9/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+    <div class="bg-white p-6 rounded-lg shadow-lg w-96">
+        <div class="flex justify-between mb-4">
+            <input id="salary" type="number" placeholder="Salary" class="border border-black p-2 w-1/2 mr-2" oninput="calculateRemaining()">
+            <input id="importantExp" type="number" placeholder="Important Exp" class="border border-black p-2 w-1/2" oninput="calculateRemaining()">
+        </div>
+        <div class="text-center mb-4">
+            <div class="border border-black p-2" id="remainMoney">= Remain money</div>
+        </div>
+        <div class="text-center mb-4">
+            <div class="border border-black p-4">
+                <table class="w-full mb-2">
+                    <thead>
+                        <tr>
+                            <th class="border border-black p-2">Product</th>
+                            <th class="border border-black p-2">Money Spent</th>
+                        </tr>
+                    </thead>
+                    <tbody id="productTable">
+                        <tr>
+                            <td class="border border-black p-2"><input type="text" placeholder="Product" class="w-full"></td>
+                            <td class="border border-black p-2"><input type="number" placeholder="Money Spent" class="w-full" oninput="calculateRemaining()"></td>
+                        </tr>
+                    </tbody>
+                </table>
+                <button onclick="addProductRow()" class="bg-green-500 text-white p-2 rounded mb-2">Add Product</button>
+            </div>
+        </div>
+        <div class="text-center">
+            <div class="border border-black p-2" id="totalRemain">Total amount Remain</div>
+        </div>
+        <div class="text-center mt-4">
+            <button onclick="generatePDF()" class="bg-red-500 text-white p-2 rounded mb-2">Generate PDF</button>
+            <button onclick="generateExcel()" class="bg-blue-500 text-white p-2 rounded mb-2">Generate Excel</button>
+            <button onclick="generateHistogram()" class="bg-purple-500 text-white p-2 rounded">Generate Histogram</button>
+        </div>
+        <div class="mt-4">
+            <canvas id="expenseChart" width="400" height="200"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const monthlyData = JSON.parse(localStorage.getItem('monthlyData')) || {};
+
+        function addProductRow() {
+            const table = document.getElementById('productTable');
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="border border-black p-2"><input type="text" placeholder="Product" class="w-full"></td>
+                <td class="border border-black p-2"><input type="number" placeholder="Money Spent" class="w-full" oninput="calculateRemaining()"></td>
+            `;
+            table.appendChild(row);
+        }
+
+        function calculateRemaining() {
+            const salary = parseFloat(document.getElementById('salary').value) || 0;
+            const importantExp = parseFloat(document.getElementById('importantExp').value) || 0;
+            const productRows = document.querySelectorAll('#productTable tr');
+            let dailyExp = 0;
+
+            productRows.forEach(row => {
+                const moneySpent = parseFloat(row.cells[1].querySelector('input').value) || 0;
+                dailyExp += moneySpent;
+            });
+
+            const remainMoney = salary - importantExp;
+            const totalRemain = salary - (importantExp + dailyExp);
+
+            document.getElementById('remainMoney').innerText = `= ${remainMoney.toFixed(2)} Remain money`;
+            document.getElementById('totalRemain').innerText = `${totalRemain.toFixed(2)} Total amount Remain`;
+
+            saveData();
+        }
+
+        function saveData() {
+            const data = {
+                salary: document.getElementById('salary').value,
+                importantExp: document.getElementById('importantExp').value,
+                products: []
+            };
+
+            const productRows = document.querySelectorAll('#productTable tr');
+            productRows.forEach(row => {
+                const product = row.cells[0].querySelector('input').value;
+                const moneySpent = row.cells[1].querySelector('input').value;
+                data.products.push({ product, moneySpent });
+            });
+
+            localStorage.setItem('expenseData', JSON.stringify(data));
+        }
+
+        function loadData() {
+            const data = JSON.parse(localStorage.getItem('expenseData'));
+            if (data) {
+                document.getElementById('salary').value = data.salary;
+                document.getElementById('importantExp').value = data.importantExp;
+
+                const table = document.getElementById('productTable');
+                table.innerHTML = '';
+                data.products.forEach(item => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="border border-black p-2"><input type="text" placeholder="Product" class="w-full" value="${item.product}"></td>
+                        <td class="border border-black p-2"><input type="number" placeholder="Money Spent" class="w-full" value="${item.moneySpent}" oninput="calculateRemaining()"></td>
+                    `;
+                    table.appendChild(row);
+                });
+
+                calculateRemaining();
+            }
+        }
+
+        function generatePDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            doc.text("Monthly Expense Report", 10, 10);
+            doc.text(`Salary: ${document.getElementById('salary').value}`, 10, 20);
+            doc.text(`Important Exp: ${document.getElementById('importantExp').value}`, 10, 30);
+            doc.text(`Remain Money: ${document.getElementById('remainMoney').innerText}`, 10, 40);
+
+            const productRows = document.querySelectorAll('#productTable tr');
+            let y = 50;
+            productRows.forEach(row => {
+                const product = row.cells[0].querySelector('input').value;
+                const moneySpent = row.cells[1].querySelector('input').value;
+                doc.text(`Product: ${product}, Money Spent: ${moneySpent}`, 10, y);
+                y += 10;
+            });
+
+            doc.text(`Total Remain: ${document.getElementById('totalRemain').innerText}`, 10, y + 10);
+
+            doc.save('monthly_expense_report.pdf');
+        }
+
+        function generateExcel() {
+            const wb = XLSX.utils.book_new();
+            const ws_data = [
+                ["Product", "Money Spent"]
+            ];
+
+            const productRows = document.querySelectorAll('#productTable tr');
+            productRows.forEach(row => {
+                const product = row.cells[0].querySelector('input').value;
+                const moneySpent = row.cells[1].querySelector('input').value;
+                ws_data.push([product, moneySpent]);
+            });
+
+            const ws = XLSX.utils.aoa_to_sheet(ws_data);
+            XLSX.utils.book_append_sheet(wb, ws, "Expenses");
+
+            XLSX.writeFile(wb, 'monthly_expense_report.xlsx');
+        }
+
+        function generateHistogram() {
+            const labels = Object.keys(monthlyData);
+            const data = Object.values(monthlyData);
+
+            const ctx = document.getElementById('expenseChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Monthly Expenses',
+                        data: data,
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        function saveMonthlyData() {
+            const currentMonth = new Date().toLocaleString('default', { month: 'long' });
+            const productRows = document.querySelectorAll('#productTable tr');
+            let monthlyExpense = 0;
+
+            productRows.forEach(row => {
+                const moneySpent = parseFloat(row.cells[1].querySelector('input').value) || 0;
+                monthlyExpense += moneySpent;
+            });
+
+            const importantExp = parseFloat(document.getElementById('importantExp').value) || 0;
+            monthlyExpense += importantExp;
+
+            monthlyData[currentMonth] = monthlyExpense;
+
+            localStorage.setItem('monthlyData', JSON.stringify(monthlyData));
+
+            // Clear the table for the new month
+            document.getElementById('productTable').innerHTML = `
+                <tr>
+                    <td class="border border-black p-2"><input type="text" placeholder="Product" class="w-full"></td>
+                    <td class="border border-black p-2"><input type="number" placeholder="Money Spent" class="w-full" oninput="calculateRemaining()"></td>
+                </tr>
+            `;
+
+            // Reset the inputs
+            document.getElementById('salary').value = '';
+            document.getElementById('importantExp').value = '';
+            document.getElementById('remainMoney').innerText = '= Remain money';
+            document.getElementById('totalRemain').innerText = 'Total amount Remain';
+
+            localStorage.removeItem('expenseData');
+        }
+
+        function checkMonthEnd() {
+            const now = new Date();
+            const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+            if (now.getDate() === lastDayOfMonth) {
+                saveMonthlyData();
+            }
+        }
+
+        setInterval(checkMonthEnd, 86400000); // Check once a day
+
+        window.onload = loadData;
+    </script>
+</body>
+</html>
